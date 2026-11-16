@@ -2,6 +2,12 @@
 
 All notable changes to Keymap Viewer are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] - 2026-11-16
+
+### Fixed
+- With "Show all actions" off, actions that use another action's shortcut were missing, so fewer actions were listed than with it on (for example 106 instead of 312). Both views and the Markdown export now list the same assigned actions.
+- Keymaps without a parent and without an OS in their name (for example "Custom_w11") showed "Any OS (not detected)". They are now recognized from their shortcuts: mostly ⌘ means macOS, mostly Ctrl means Windows / Linux.
+
 ## [1.0.1] - 2026-11-16
 
 ### Changed

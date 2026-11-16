@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.github.khorkovenko.keymapviewer"
-version = "1.0.1"
+version = "1.0.2"
 
 repositories {
     mavenCentral()
@@ -34,6 +34,11 @@ intellijPlatform {
         }
         // Shown on the Marketplace page and in the IDE's update dialog (full history: CHANGELOG.md)
         changeNotes = """
+            <p><b>1.0.2</b></p>
+            <ul>
+              <li>Fixed: with "Show all actions" off, actions that share another action's shortcut were missing, so the assigned count was too low</li>
+              <li>Fixed: standalone keymaps without an OS in their name (e.g. "Custom_w11") are now recognized from their shortcuts</li>
+            </ul>
             <p><b>1.0.1</b></p>
             <ul>
               <li>Icon buttons with tooltips for all keymap actions, on the same line as the keymap drop-down</li>

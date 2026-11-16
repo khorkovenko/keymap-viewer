@@ -2,6 +2,8 @@ package io.github.khorkovenko.keymapviewer
 
 import com.intellij.openapi.actionSystem.ActionGroup
 import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.KeyboardShortcut
+import java.awt.event.InputEvent
 import com.intellij.openapi.actionSystem.Shortcut
 import com.intellij.openapi.keymap.Keymap
 import com.intellij.openapi.keymap.ex.KeymapManagerEx
@@ -88,7 +90,29 @@ object KeymapData {
             (osFromName(k.name) ?: osFromName(k.presentableName))?.let { return it }
             k = k.parent
         }
-        return TargetOs.UNKNOWN
+        return guessFromShortcuts(keymap) ?: TargetOs.UNKNOWN
+    }
+
+    /**
+     * For keymaps whose names say nothing (e.g. a standalone "Custom_w11" without a parent): look at the
+     * shortcuts themselves. macOS keymaps use ⌘ (Meta) as the main modifier, Windows/Linux keymaps use Ctrl.
+     */
+    private fun guessFromShortcuts(keymap: Keymap): TargetOs? {
+        var ctrl = 0
+        var meta = 0
+        for (id in keymap.actionIdList) {
+            for (sc in keymap.getShortcuts(id)) {
+                val m = (sc as? KeyboardShortcut)?.firstKeyStroke?.modifiers ?: continue
+                if (m and InputEvent.CTRL_DOWN_MASK != 0) ctrl++
+                if (m and InputEvent.META_DOWN_MASK != 0) meta++
+            }
+        }
+        if (ctrl + meta < 10) return null // too few shortcuts to tell
+        return when {
+            meta > ctrl * 2 -> TargetOs.MAC
+            ctrl > meta * 2 -> TargetOs.WINDOWS_LINUX
+            else -> null
+        }
     }
 
     /** OS a keymap name points to ("Mac OS X 10.5+" → macOS, …), or null if the name doesn't say. */
@@ -117,15 +141,14 @@ object KeymapData {
         val categories = ActionCategories.load()
         val doubles = DoubleModifierStore.getInstance().forKeymap(keymap.name)
 
-        val ids: Collection<String> = if (includeUnassigned) {
-            val all = actionManager.getActionIdList("").filter {
-                // Skip menus/toolbars (groups) unless the keymap binds a shortcut to them
-                actionManager.getActionOrStub(it) !is ActionGroup || keymap.getShortcuts(it).isNotEmpty()
-            }
-            (all + keymap.actionIdList + doubles.keys).toSet()
-        } else {
-            keymap.actionIdList + doubles.keys
+        // Every registered action, not just the keymap's own entries: some actions have no entry of their own
+        // but "use the shortcut of" another action, and keymap.getShortcuts() returns those too.
+        // Both views use the same list, so "assigned" means the same thing in each.
+        val all = actionManager.getActionIdList("").filter {
+            // Skip menus/toolbars (groups) unless the keymap binds a shortcut to them
+            actionManager.getActionOrStub(it) !is ActionGroup || keymap.getShortcuts(it).isNotEmpty()
         }
+        val ids: Collection<String> = (all + keymap.actionIdList + doubles.keys).toSet()
 
         val rows = ids.mapNotNull { id ->
             val shortcuts = keymap.getShortcuts(id).toList() + listOfNotNull(doubles[id]?.let(DoubleModifier::of))

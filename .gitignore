@@ -1,0 +1,12 @@
+.gradle/
+build/
+.idea/
+.intellijPlatform/
+*.iml
+.kotlin/
+
+# Signing keys and certificates: never commit
+*.pem
+*.crt
+*.key
+*.p12

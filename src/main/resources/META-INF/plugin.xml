@@ -1,0 +1,33 @@
+<idea-plugin>
+    <!-- Must be unique on the Marketplace and must NOT contain "intellij" or "jetbrains". -->
+    <id>io.github.khorkovenko.keymapviewer</id>
+    <name>Keymap Viewer</name>
+    <vendor url="https://github.com/khorkovenko/keymap-viewer">khorkovenko</vendor>
+
+    <description><![CDATA[
+        <p>Browse every keymap installed in your IDE and see what it does at a glance.</p>
+        <ul>
+            <li>Pick any keymap (built-in or your own) from a drop-down</li>
+            <li>See which operating system it is designed for (macOS, Windows, Linux) and what it inherits from</li>
+            <li>Search actions and shortcuts; show only assigned actions or every action</li>
+            <li>Double-click to change a shortcut: press the keys, and they are translated to the keymap's OS (Ctrl ↔ ⌘)</li>
+            <li>Mouse shortcuts (Ctrl+Click, Ctrl+Double Click…), two-step shortcuts (Ctrl+K, Ctrl+K) and double modifiers (Double Ctrl, Double Shift)</li>
+            <li>Click a shortcut cell to type a shortcut, with suggestions for every key name</li>
+            <li>Resolve conflicts: remove from others, review one by one, keep, or undo</li>
+            <li>Copy a keymap or create a new empty one for macOS, Windows or Linux</li>
+            <li>Export the assigned shortcuts of a keymap to a Markdown file</li>
+            <li>Import and export keymaps as IntelliJ keymap XML files</li>
+        </ul>
+        <p>Open it from <b>View | Tool Windows | Keymap Viewer</b>.</p>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Keymap Viewer"
+                    anchor="right"
+                    icon="/icons/keymapToolWindow.svg"
+                    factoryClass="io.github.khorkovenko.keymapviewer.KeymapToolWindowFactory"/>
+        <postStartupActivity implementation="io.github.khorkovenko.keymapviewer.DoubleModifierStartup"/>
+    </extensions>
+</idea-plugin>

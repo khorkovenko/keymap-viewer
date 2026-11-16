@@ -17,6 +17,9 @@
             <li>Copy a keymap or create a new empty one for macOS, Windows or Linux</li>
             <li>Export the assigned shortcuts of a keymap to a Markdown file</li>
             <li>Import and export keymaps as IntelliJ keymap XML files</li>
+            <li>Migrate a keymap to another OS in one step (Ctrl ↔ ⌘ translated)</li>
+            <li>Markdown view grouped by menu (Edit, View, Navigate…)</li>
+            <li>Compact icon toolbar; maximize the tool window or open it in its own (fullscreen-capable) window</li>
         </ul>
         <p>Open it from <b>View | Tool Windows | Keymap Viewer</b>.</p>
     ]]></description>

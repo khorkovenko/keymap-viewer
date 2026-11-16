@@ -1,6 +1,12 @@
 package io.github.khorkovenko.keymapviewer
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.actionSystem.KeyboardShortcut
 import com.intellij.openapi.actionSystem.MouseShortcut
 import com.intellij.openapi.application.ApplicationManager
@@ -56,11 +62,6 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
                     (if (name == KeymapData.activeKeymap().name) "  (active)" else "")
         }
     }
-    private val makeActiveButton = JButton("Make Active").apply { addActionListener { makeActive() } }
-    private val deleteButton = JButton("Delete…").apply {
-        toolTipText = "Delete the selected custom keymap"
-        addActionListener { deleteKeymap() }
-    }
     private val showAllBox = JBCheckBox("Show all actions", PropertiesComponent.getInstance().getBoolean(SHOW_ALL_KEY, true)).apply {
         toolTipText = "On: every action, so all keymaps list the same rows. Off: only actions with a shortcut."
     }
@@ -81,7 +82,6 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
     private val viewCards = CardLayout()
     private val viewPanel = JPanel(viewCards)
     private var currentSummary: KeymapSummary? = null
-    private val exportMdButton = JButton("Export .md…").apply { addActionListener { exportToFile() } }
     private val searchField = SearchTextField(false)
     private val infoLabel = JBLabel()
     private val statusLabel = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
@@ -97,46 +97,93 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         columnModel.getColumn(2).preferredWidth = 220
     }
 
+    private val toolbar = ActionManager.getInstance().createActionToolbar("KeymapViewer", DefaultActionGroup().apply {
+        add(iconAction("Make Active", "Make the selected keymap the IDE's active keymap", AllIcons.Actions.Checked,
+            enabled = { k, _ -> k.name != KeymapData.activeKeymap().name }) { makeActive() })
+        add(iconAction("Copy Keymap…", "Create a new keymap as a copy of the selected one", AllIcons.Actions.Copy) { copyKeymap() })
+        add(iconAction("Delete Keymap…", "Delete the selected custom keymap (built-in keymaps can't be deleted)", AllIcons.General.Remove,
+            enabled = { k, _ -> k.canModify() }) { deleteKeymap() })
+        add(iconAction("New Empty Keymap…", "Create a keymap with no shortcuts", AllIcons.General.Add) { newEmptyKeymap() })
+        addSeparator()
+        add(iconAction("Export .md…", "Save the assigned shortcuts as a Markdown file (needs at least one assigned shortcut)",
+            AllIcons.FileTypes.Text, enabled = { _, s -> (s?.assignedCount ?: 0) > 0 }) { exportToFile() })
+        add(iconAction("Import Keymap…", "Add a keymap from an IntelliJ keymap .xml file", AllIcons.ToolbarDecorator.Import) { importKeymap() })
+        add(iconAction("Export Keymap…", "Save the selected keymap as an IntelliJ keymap .xml file", AllIcons.ToolbarDecorator.Export) { exportKeymap() })
+        add(iconAction("Migrate to OS…", "Create a copy of the selected keymap for another OS (Ctrl ↔ ⌘ translated)",
+            AllIcons.Actions.SwapPanels) { migrateKeymap() })
+    }, true)
+
+    /** A toolbar icon button; [enabled] decides from the selected keymap and its summary whether it can be clicked. */
+    private fun iconAction(
+        text: String, description: String, icon: javax.swing.Icon,
+        enabled: (Keymap, KeymapSummary?) -> Boolean = { _, _ -> true },
+        run: () -> Unit,
+    ) = object : DumbAwareAction(text, description, icon) {
+        override fun getActionUpdateThread() = ActionUpdateThread.EDT
+        override fun update(e: AnActionEvent) {
+            val k = selectedKeymap
+            e.presentation.isEnabled = k != null && enabled(k, currentSummary)
+        }
+        override fun actionPerformed(e: AnActionEvent) = run()
+    }
+
+    private val searchRow = CompactRow(BorderLayout(JBUI.scale(8), JBUI.scale(2))).apply { border = JBUI.Borders.empty(2, 4) }
+    // GridBagLayout centers the checkboxes vertically on the search field's line
+    private val checkboxes = JPanel(java.awt.GridBagLayout()).apply {
+        add(showAllBox, java.awt.GridBagConstraints().apply { insets = JBUI.insetsRight(8) })
+        add(markdownBox, java.awt.GridBagConstraints())
+    }
+    private var searchStacked: Boolean? = null
+
+    private fun layoutSearchRow(stacked: Boolean) {
+        if (searchStacked == stacked) return
+        searchStacked = stacked
+        searchRow.removeAll()
+        if (stacked) {
+            searchRow.add(searchField, BorderLayout.NORTH)
+            searchRow.add(JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply { add(checkboxes) }, BorderLayout.SOUTH)
+        } else {
+            searchRow.add(searchField, BorderLayout.CENTER)
+            searchRow.add(checkboxes, BorderLayout.EAST)
+        }
+        searchRow.revalidate()
+        searchRow.repaint()
+    }
+
     private var suppressEvents = false
 
     init {
-        fun button(text: String, tooltip: String, onClick: () -> Unit) =
-            JButton(text).apply { toolTipText = tooltip; addActionListener { onClick() } }
-
-        // WrapLayout moves buttons to the next line when the tool window is narrow (FlowLayout just cuts them off)
-        fun wrapRow() = JPanel(WrapLayout(FlowLayout.LEFT, 6, 4)).apply { alignmentX = LEFT_ALIGNMENT }
-        val row0 = wrapRow().apply {
+        // Icon buttons with tooltips (same order in every layout). They sit right after the drop-down and
+        // wrap to the next line only if the tool window is very narrow.
+        toolbar.targetComponent = this
+        // Drop-down + icon buttons on one line, vertically centered; the icons move to a second line only
+        // when the tool window is too narrow for both.
+        val controls = CompactRow(LineWrapLayout(JBUI.scale(6), JBUI.scale(2))).apply {
+            border = JBUI.Borders.empty(2, 4, 0, 4)
             add(JBLabel("Keymap:")); add(keymapCombo)
-            add(makeActiveButton)
-            add(button("Copy…", "Create a new keymap as a copy of the selected one") { copyKeymap() })
-            add(deleteButton)
-            add(button("New Empty…", "Create a keymap with no shortcuts") { newEmptyKeymap() })
+            add(toolbar.component.apply { border = JBUI.Borders.empty() })
         }
-        val row1 = wrapRow().apply {
-            add(exportMdButton)
-            add(button("Import Keymap…", "Add a keymap from an IntelliJ keymap .xml file") { importKeymap() })
-            add(button("Export Keymap…", "Save the selected keymap as an IntelliJ keymap .xml file") { exportKeymap() })
-            add(button("Migrate to OS…", "Create a copy of the selected keymap for another OS (Ctrl ↔ ⌘ translated)") { migrateKeymap() })
+        val info = CompactRow(BorderLayout(0, 0)).apply {
+            border = JBUI.Borders.empty(2, 6, 0, 6)
+            add(infoLabel, BorderLayout.NORTH)
+            add(statusLabel, BorderLayout.CENTER)
         }
         val top = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            border = JBUI.Borders.empty(4)
-            add(row0); add(row1)
-            add(JPanel(BorderLayout(0, 4)).apply {
-                alignmentX = LEFT_ALIGNMENT
-                border = JBUI.Borders.empty(0, 6, 4, 6)
-                add(infoLabel, BorderLayout.NORTH)
-                add(statusLabel, BorderLayout.CENTER)
-                add(searchField, BorderLayout.SOUTH)
-            })
+            add(controls); add(info); add(searchRow)
         }
+        layoutSearchRow(stacked = false)
+        // Wide panel: search and checkboxes share a line. Narrow panel: checkboxes go under a full-width search bar.
+        addComponentListener(object : java.awt.event.ComponentAdapter() {
+            override fun componentResized(e: java.awt.event.ComponentEvent) {
+                layoutSearchRow(stacked = width < JBUI.scale(640))
+                controls.revalidate() // the icon line may wrap or unwrap at the new width
+            }
+        })
         add(top, BorderLayout.NORTH)
-        add(JPanel(BorderLayout()).apply {
-            add(JPanel(FlowLayout(FlowLayout.LEFT, 6, 2)).apply { add(showAllBox); add(markdownBox) }, BorderLayout.NORTH)
-            viewPanel.add(JBScrollPane(table), CARD_TABLE)
-            viewPanel.add(JBScrollPane(markdownView), CARD_MD)
-            add(viewPanel, BorderLayout.CENTER)
-        }, BorderLayout.CENTER)
+        viewPanel.add(JBScrollPane(table), CARD_TABLE)
+        viewPanel.add(JBScrollPane(markdownView), CARD_MD)
+        add(viewPanel, BorderLayout.CENTER)
 
         keymapCombo.addActionListener { if (!suppressEvents) { statusLabel.text = ""; refresh() } }
         markdownBox.addActionListener {
@@ -212,12 +259,7 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         infoLabel.text = "<html>Designed for: <b>${summary.targetOs.label}</b> &nbsp;·&nbsp; " +
             "${if (summary.isCustom) "Custom" else "Built-in (read-only)"} &nbsp;·&nbsp; " +
             "Inherits: ${summary.inheritance.joinToString(" → ")} &nbsp;·&nbsp; $count</html>"
-        makeActiveButton.isEnabled = keymap.name != KeymapData.activeKeymap().name
-        deleteButton.isEnabled = keymap.canModify()
-        deleteButton.toolTipText = if (keymap.canModify()) "Delete the selected custom keymap" else "Built-in keymaps can't be deleted"
-        exportMdButton.isEnabled = summary.assignedCount > 0
-        exportMdButton.toolTipText = if (summary.assignedCount > 0) "Save the assigned shortcuts as a Markdown file"
-        else "This keymap has no assigned shortcuts, so there is nothing to export"
+        toolbar.updateActionsAsync() // re-evaluate which icon buttons are enabled
         applyFilter()
         keepActionId?.let(::selectAction)
     }
@@ -509,6 +551,67 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
 
         override fun setValueAt(value: Any?, row: Int, column: Int) {
             if (column == 0 && row in rows.indices) onShortcutTyped(row, value?.toString() ?: "")
+        }
+    }
+}
+
+/** A row for a vertical BoxLayout that is never stretched taller than it needs to be. */
+private class CompactRow(layout: java.awt.LayoutManager) : JPanel(layout) {
+    init { alignmentX = LEFT_ALIGNMENT }
+    override fun getMaximumSize(): java.awt.Dimension = java.awt.Dimension(Int.MAX_VALUE, preferredSize.height)
+}
+
+/**
+ * Lays components out left to right, vertically centered on each line, and starts a new line only when the
+ * next component doesn't fit. Unlike FlowLayout/WrapLayout it adds no extra space above or below the lines.
+ */
+private class LineWrapLayout(private val hgap: Int, private val vgap: Int) : java.awt.LayoutManager {
+    override fun addLayoutComponent(name: String?, comp: java.awt.Component?) {}
+    override fun removeLayoutComponent(comp: java.awt.Component?) {}
+
+    private fun lines(target: java.awt.Container): List<List<java.awt.Component>> {
+        val ins = target.insets
+        val maxWidth = if (target.width <= 0) Int.MAX_VALUE else target.width - ins.left - ins.right
+        val result = ArrayList<List<java.awt.Component>>()
+        var line = ArrayList<java.awt.Component>()
+        var lineWidth = 0
+        for (c in target.components) {
+            if (!c.isVisible) continue
+            val w = c.preferredSize.width
+            val needed = if (line.isEmpty()) w else lineWidth + hgap + w
+            if (line.isNotEmpty() && needed > maxWidth) {
+                result += line; line = arrayListOf(c); lineWidth = w
+            } else {
+                line += c; lineWidth = needed
+            }
+        }
+        if (line.isNotEmpty()) result += line
+        return result
+    }
+
+    override fun preferredLayoutSize(target: java.awt.Container): java.awt.Dimension {
+        val ins = target.insets
+        val ls = lines(target)
+        val height = ls.sumOf { l -> l.maxOf { it.preferredSize.height } } + vgap * (ls.size - 1).coerceAtLeast(0)
+        val width = ls.maxOfOrNull { l -> l.sumOf { it.preferredSize.width } + hgap * (l.size - 1) } ?: 0
+        return java.awt.Dimension(width + ins.left + ins.right, height + ins.top + ins.bottom)
+    }
+
+    // Never forces the tool window wider: it wraps instead
+    override fun minimumLayoutSize(target: java.awt.Container) = java.awt.Dimension(0, preferredLayoutSize(target).height)
+
+    override fun layoutContainer(target: java.awt.Container) {
+        val ins = target.insets
+        var y = ins.top
+        for (line in lines(target)) {
+            val lineHeight = line.maxOf { it.preferredSize.height }
+            var x = ins.left
+            for (c in line) {
+                val d = c.preferredSize
+                c.setBounds(x, y + (lineHeight - d.height) / 2, d.width, d.height)
+                x += d.width + hgap
+            }
+            y += lineHeight + vgap
         }
     }
 }

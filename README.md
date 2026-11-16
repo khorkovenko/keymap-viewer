@@ -76,6 +76,10 @@ openssl req -key private.pem -new -x509 -days 3650 -out chain.crt
 
 Put the file contents in the environment variables `CERTIFICATE_CHAIN` (chain.crt), `PRIVATE_KEY` (private.pem) and `PRIVATE_KEY_PASSWORD`, then run `./gradlew signPlugin`. Never commit these files; `.gitignore` already excludes them.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
 [MIT](LICENSE)

@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.github.khorkovenko.keymapviewer"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -32,14 +32,17 @@ intellijPlatform {
             sinceBuild = "251"          // 2025.1+
             untilBuild = provider { null } // no upper bound
         }
+        // Shown on the Marketplace page and in the IDE's update dialog (full history: CHANGELOG.md)
         changeNotes = """
-            <p>First release:</p>
+            <p><b>1.0.1</b></p>
             <ul>
-              <li>Browse all keymaps, see which OS each is for, search actions</li>
-              <li>Edit shortcuts by pressing keys or typing them (with key-name suggestions); mouse, two-step and double-modifier shortcuts</li>
-              <li>Conflict resolution, copy / new / delete keymaps, migrate a keymap to another OS</li>
-              <li>Markdown view and export, keymap XML import and export</li>
+              <li>Icon buttons with tooltips for all keymap actions, on the same line as the keymap drop-down</li>
+              <li>Compact layout: the table is always visible when the tool window is docked at the bottom; search and view options adapt to wide and narrow panels</li>
+              <li>New title-bar buttons: Maximize, and Open in Separate Window (can be made fullscreen)</li>
+              <li>Double modifiers (Double Ctrl / Shift / Alt) no longer use IDE-internal APIs</li>
+              <li>Fixed: OS detection for keymaps such as Sublime Text</li>
             </ul>
+            <p><b>1.0.0</b>: first release. Browse, search, edit, migrate and export keymaps.</p>
         """.trimIndent()
     }
 

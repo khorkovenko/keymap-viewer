@@ -84,7 +84,8 @@ object KeymapData {
     fun detectTargetOs(keymap: Keymap): TargetOs {
         var k: Keymap? = keymap
         while (k != null) {
-            osFromName(k.name)?.let { return it }
+            // Some parents only say "Windows" in their display name, not their internal name
+            (osFromName(k.name) ?: osFromName(k.presentableName))?.let { return it }
             k = k.parent
         }
         return TargetOs.UNKNOWN

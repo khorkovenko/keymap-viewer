@@ -2,6 +2,7 @@ package io.github.khorkovenko.keymapviewer
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.KeyboardShortcut
@@ -58,7 +59,8 @@ class MissedShortcutStore : PersistentStateComponent<MissedShortcutStore.Data>, 
                         is KeyEvent -> if (id.startsWith("Activate") && id.endsWith("ToolWindow")) {
                             lastKeyboardActivation = id to System.currentTimeMillis()
                         }
-                        is MouseEvent -> if (shortcutOf(id) != null) record(id)
+                        // A mouse shortcut (Ctrl+Click → Go to Declaration) is a shortcut too, not a miss
+                        is MouseEvent -> if (event.place != ActionPlaces.MOUSE_SHORTCUT && shortcutOf(id) != null) record(id)
                         else -> {} // run by the IDE itself or from a popup list: not a missed shortcut
                     }
                 }
@@ -128,7 +130,8 @@ class MissedShortcutStore : PersistentStateComponent<MissedShortcutStore.Data>, 
 object MissedShortcutTracker {
     fun install(project: Project) {
         val store = MissedShortcutStore.getInstance()
-        project.messageBus.connect().subscribe(ToolWindowManagerListener.TOPIC, object : ToolWindowManagerListener {
+        // Tied to the store, so the listener goes away when the plugin is unloaded (and with the project)
+        project.messageBus.connect(store).subscribe(ToolWindowManagerListener.TOPIC, object : ToolWindowManagerListener {
             override fun toolWindowShown(toolWindow: ToolWindow) = store.toolWindowClicked(toolWindow)
         })
     }

@@ -90,7 +90,9 @@ object ShortcutText {
      */
     fun parse(text: String, mac: Boolean, existing: List<Shortcut> = emptyList()): Result {
         val known = existing.associateBy { ShortcutFormatter.format(it, mac).trim().lowercase() }
-        val pieces = text.split(Regex("\\s+or\\s+|;|\\|", RegexOption.IGNORE_CASE)).map { it.trim() }.filter { it.isNotEmpty() }
+        // ";" and "|" separate shortcuts only after a complete one: in "Ctrl+;" (or a lone ";") they are the key itself
+        val pieces = text.split(Regex("\\s+or\\s+|(?<=[^+\\s])\\s*[;|]\\s*(?=\\S)", RegexOption.IGNORE_CASE))
+            .map { it.trim() }.filter { it.isNotEmpty() }
         val out = ArrayList<Shortcut>()
         for (p in pieces) {
             known[p.lowercase()]?.let { out += it; continue }
@@ -184,12 +186,11 @@ object ShortcutText {
     }
 
     private fun keyCode(token: String): Int? {
-        KEYS[norm(token)]?.let { return it }
-        // Single printable ASCII characters: "F", "7", ",", "-", "/" …
+        // Single printable ASCII characters first: "F", "7", ",", "-", "_", "/" … (norm() would strip "-" and "_")
         if (token.length == 1 && token[0].code in 33..126) {
             val c = KeyEvent.getExtendedKeyCodeForChar(token[0].code)
             if (c != KeyEvent.VK_UNDEFINED) return c
         }
-        return null
+        return norm(token).takeIf { it.isNotEmpty() }?.let { KEYS[it] }
     }
 }

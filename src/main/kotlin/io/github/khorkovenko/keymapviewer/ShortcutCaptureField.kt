@@ -47,6 +47,7 @@ class ShortcutCaptureField(private val render: (Shortcut) -> String) : JBTextFie
         val mouse = object : MouseAdapter() {
             override fun mousePressed(e: MouseEvent) {
                 requestFocusInWindow()
+                tapCandidate = null; lastTapKey = null // Ctrl+Click, Ctrl+Click is not "Double Ctrl"
                 val modifiers = e.modifiersEx and MODIFIERS
                 val button = MouseShortcut.getButton(e)
                 // A plain single left click is how you focus the field, so it isn't recorded

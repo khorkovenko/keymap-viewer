@@ -73,6 +73,7 @@ class MacroStore : PersistentStateComponent<MacroStore.Data>, Disposable {
     fun save(macro: Macro, oldName: String?) {
         if (oldName != null && oldName != macro.name) {
             moveShortcuts(MacroStore.PREFIX + oldName, macro.actionId)
+            DoubleModifierStore.getInstance().moveAction(PREFIX + oldName, macro.actionId)
             remove(oldName, keepShortcuts = true)
         }
         data.macros.removeAll { decode(it)?.name == macro.name }
@@ -86,9 +87,10 @@ class MacroStore : PersistentStateComponent<MacroStore.Data>, Disposable {
             // Don't leave shortcuts pointing at a macro that no longer exists
             KeymapManager.getInstance().let { km ->
                 (km as? com.intellij.openapi.keymap.ex.KeymapManagerEx)?.allKeymaps
-                    ?.filter { it.canModify() }
+                    ?.filter { it.canModify() && it.getShortcuts(PREFIX + name).isNotEmpty() } // leave other keymaps untouched
                     ?.forEach { it.removeAllActionShortcuts(PREFIX + name) }
             }
+            DoubleModifierStore.getInstance().moveAction(PREFIX + name, null)
         }
         registerActions()
     }
@@ -104,7 +106,11 @@ class MacroStore : PersistentStateComponent<MacroStore.Data>, Disposable {
         }
     }
 
-    /** (Re-)registers one IDE action per macro and removes actions of deleted macros. */
+    /**
+     * (Re-)registers one IDE action per macro and removes actions of deleted macros.
+     * Synchronized: it is called both when the settings load and from the startup activity of every project.
+     */
+    @Synchronized
     fun registerActions() {
         val manager = ActionManager.getInstance()
         val wanted = all().associateBy { it.actionId }
@@ -112,11 +118,14 @@ class MacroStore : PersistentStateComponent<MacroStore.Data>, Disposable {
         registered.retainAll(wanted.keys)
         wanted.forEach { (id, macro) ->
             if (id in registered) manager.unregisterAction(id) // steps may have changed
+            // Never fail on an ID that is somehow taken (e.g. left over from a previous plugin load)
+            if (manager.getActionOrStub(id) != null) manager.unregisterAction(id)
             manager.registerAction(id, MacroAction(macro))
             registered += id
         }
     }
 
+    @Synchronized
     override fun dispose() {
         val manager = ActionManager.getInstance()
         registered.forEach { manager.unregisterAction(it) }

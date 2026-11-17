@@ -156,7 +156,7 @@ class MissedShortcutsDialog(project: Project?) : DialogWrapper(project) {
         override fun getRowCount() = rows.size
         override fun getColumnCount() = columns.size
         override fun getColumnName(column: Int) = columns[column]
-        override fun getColumnClass(column: Int): Class<*> = if (column == 2) Integer::class.java else String::class.java
+        override fun getColumnClass(column: Int): Class<*> = if (column == 2) Int::class.javaObjectType else String::class.java
         override fun getValueAt(row: Int, column: Int): Any = with(rows[row]) {
             when (column) {
                 0 -> store.shortcutOf(actionId)?.let { ShortcutFormatter.format(it, mac) } ?: "—"

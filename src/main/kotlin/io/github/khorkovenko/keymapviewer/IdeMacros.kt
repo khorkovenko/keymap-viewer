@@ -2,6 +2,7 @@ package io.github.khorkovenko.keymapviewer
 
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.util.JDOMUtil
+import org.jdom.Element
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.swing.KeyStroke
@@ -19,8 +20,13 @@ object IdeMacros {
         val f = file
         if (!Files.isRegularFile(f)) return emptyList()
         val root = runCatching { JDOMUtil.load(f) }.getOrNull() ?: return emptyList()
-        val component = root.getChildren("component").firstOrNull { it.getAttributeValue("name") == "ActionMacroManager" }
-            ?: return emptyList()
+        return parse(root).orEmpty()
+    }
+
+    /** The macros in a macros.xml root element, or null if it isn't IntelliJ's macros file. */
+    fun parse(root: Element): List<Macro>? {
+        val component = (if (root.name == "component") root else root.getChildren("component").firstOrNull())
+            ?.takeIf { it.getAttributeValue("name") == "ActionMacroManager" } ?: return null
         return component.getChildren("macro").mapNotNull { m ->
             val name = m.getAttributeValue("name")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val steps = m.children.mapNotNull { e ->

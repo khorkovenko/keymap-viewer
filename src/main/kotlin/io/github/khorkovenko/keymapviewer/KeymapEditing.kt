@@ -6,8 +6,8 @@ import com.intellij.openapi.actionSystem.Shortcut
 import com.intellij.openapi.keymap.Keymap
 import com.intellij.openapi.keymap.KeymapUtil
 import com.intellij.openapi.keymap.ex.KeymapManagerEx
-import com.intellij.openapi.keymap.impl.KeymapImpl
 import com.intellij.openapi.util.JDOMUtil
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.ui.KeyStrokeAdapter
 import org.jdom.Element
 import java.io.File
@@ -16,7 +16,6 @@ import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.ValidationInfo
-import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBTextField
@@ -27,6 +26,9 @@ import javax.swing.JComponent
 
 /** Creating keymaps: copies, empty keymaps, and editable copies of read-only built-in keymaps. */
 object KeymapEditing {
+
+    /** Element in an exported keymap file holding the plugin's double-modifier shortcuts. */
+    private const val DOUBLE_MODIFIERS = "keymap-viewer-double-modifiers"
 
     private val manager: KeymapManagerEx get() = KeymapManagerEx.getInstanceEx()
 
@@ -82,12 +84,9 @@ object KeymapEditing {
      * Built by hand rather than with KeymapImpl.writeScheme(), which would mark unsaved changes as saved.
      */
     fun writeXml(keymap: Keymap, file: File) {
-        val impl = keymap as? KeymapImpl
         val root = Element("keymap").setAttribute("version", "1").setAttribute("name", keymap.name)
         keymap.parent?.let { root.setAttribute("parent", it.name) }
-        val ids = keymap.actionIdList
-            .filter { impl == null || keymap.parent == null || impl.hasOwnActionId(it) }
-            .sorted()
+        val ids = (KeymapData.ownActionIds(keymap) ?: keymap.actionIdList).sorted()
         for (id in ids) {
             val action = Element("action").setAttribute("id", id)
             for (sc in keymap.getShortcuts(id)) {
@@ -103,6 +102,14 @@ object KeymapEditing {
             }
             root.addContent(action)
         }
+        // Double Ctrl / Shift / Alt are kept by this plugin, not by the keymap; IntelliJ ignores this element
+        val doubles = DoubleModifierStore.getInstance().forKeymap(keymap.name)
+        if (doubles.isNotEmpty()) root.addContent(Element(DOUBLE_MODIFIERS).apply {
+            doubles.toSortedMap().forEach { (id, code) ->
+                addContent(Element("action").setAttribute("id", id).setAttribute("key-code", code.toString())
+                    .setAttribute("key", "Double " + java.awt.event.KeyEvent.getKeyText(code)))
+            }
+        })
         file.writeText(JDOMUtil.write(root))
     }
 
@@ -137,7 +144,8 @@ object KeymapEditing {
             else -> "Full keymap (no parent) for ${os.label}."
         }
         val dlg = NewKeymapDialog(project, "Import Keymap", uniqueName(fileKeymapName), askOs = false,
-            note = "<html>${actions.size} action(s) from ${file.name}.<br>$basedOn</html>")
+            note = "<html>${actions.size} action(s) from ${StringUtil.escapeXmlEntities(file.name)}.<br>" +
+                "${StringUtil.escapeXmlEntities(basedOn)}</html>")
         if (!dlg.showAndGet()) return null
 
         val keymap = if (parent != null) {
@@ -176,6 +184,11 @@ object KeymapEditing {
             }
         }
         register(keymap, dlg.makeActive)
+        root.getChild(DOUBLE_MODIFIERS)?.getChildren("action")?.forEach { a ->
+            val id = a.getAttributeValue("id") ?: return@forEach
+            val code = a.getAttributeValue("key-code")?.toIntOrNull()?.takeIf { it in DoubleModifier.modifierKeys }
+            if (code != null) DoubleModifierStore.getInstance().set(keymap.name, id, code) else skipped++
+        }
         if (skipped > 0) {
             Messages.showWarningDialog(project, "$skipped shortcut(s) in the file couldn't be read and were skipped.", "Import Keymap")
         }

@@ -22,10 +22,10 @@ import com.intellij.openapi.keymap.KeymapManagerListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.SearchTextField
-import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
@@ -106,8 +106,8 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         addSeparator()
         add(iconAction("Export .md…", "Save the assigned shortcuts as a Markdown file (needs at least one assigned shortcut)",
             AllIcons.FileTypes.Text, enabled = { _, s -> (s?.assignedCount ?: 0) > 0 }) { exportToFile() })
-        add(iconAction("Import Keymap…", "Add a keymap from an IntelliJ keymap .xml file", AllIcons.ToolbarDecorator.Import) { importKeymap() })
-        add(iconAction("Export Keymap…", "Save the selected keymap as an IntelliJ keymap .xml file", AllIcons.ToolbarDecorator.Export) { exportKeymap() })
+        add(iconAction("Import Keymap…", "Import keymap .xml files, macro files, or a whole export folder (each file is recognized automatically)", AllIcons.ToolbarDecorator.Import) { importKeymap() })
+        add(iconAction("Export Keymap…", "Save the selected keymap and all macros into a folder", AllIcons.ToolbarDecorator.Export) { exportKeymap() })
         add(iconAction("Migrate to OS…", "Create a copy of the selected keymap for another OS (Ctrl ↔ ⌘ translated)",
             AllIcons.Actions.SwapPanels) { migrateKeymap() })
         addSeparator()
@@ -223,6 +223,10 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
                 override fun keymapAdded(keymap: Keymap) = scheduleReload()
                 override fun keymapRemoved(keymap: Keymap) = scheduleReload()
                 override fun activeKeymapChanged(keymap: Keymap?) = scheduleReload()
+                // Shortcuts edited in Settings | Keymap (or by another plugin) while this panel is open
+                override fun shortcutsChanged(keymap: Keymap, actionIds: Collection<String>, fromSettings: Boolean) {
+                    if (keymap.name == keymapCombo.selectedItem) scheduleReload()
+                }
             })
 
         reloadKeymaps(KeymapData.activeKeymap())
@@ -236,7 +240,11 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         reloadPending = true
         ApplicationManager.getApplication().invokeLater {
             reloadPending = false
+            if (table.isEditing) return@invokeLater // don't throw away what is being typed; the edit refreshes anyway
+            val selectedAction = table.selectedRow.takeIf { it >= 0 }
+                ?.let { tableModel.rows.getOrNull(table.convertRowIndexToModel(it))?.actionId }
             reloadKeymaps(selectedKeymap)
+            selectedAction?.let(::selectAction)
         }
     }
 
@@ -263,7 +271,7 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         else "${summary.assignedCount} actions"
         infoLabel.text = "<html>Designed for: <b>${summary.targetOs.label}</b> &nbsp;·&nbsp; " +
             "${if (summary.isCustom) "Custom" else "Built-in (read-only)"} &nbsp;·&nbsp; " +
-            "Inherits: ${summary.inheritance.joinToString(" → ")} &nbsp;·&nbsp; $count</html>"
+            "Inherits: ${summary.inheritance.joinToString(" → ") { StringUtil.escapeXmlEntities(it) }} &nbsp;·&nbsp; $count</html>"
         toolbar.updateActionsAsync() // re-evaluate which icon buttons are enabled
         applyFilter()
         keepActionId?.let(::selectAction)
@@ -488,7 +496,12 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
             .createSaveFileDialog(descriptor, project)
             .save("keymap-$safeName.md") ?: return
 
-        target.file.writeText(MarkdownExporter.toMarkdown(summary))
+        try {
+            target.file.writeText(MarkdownExporter.toMarkdown(summary))
+        } catch (e: java.io.IOException) {
+            Messages.showErrorDialog(project, "Can't write ${target.file.path}: ${e.message}", "Export .md")
+            return
+        }
 
         // Open the exported file in the editor so the user immediately sees the Markdown preview.
         LocalFileSystem.getInstance().refreshAndFindFileByIoFile(target.file)?.let {
@@ -498,13 +511,27 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
 
     // ---- keymap files ----------------------------------------------------------------------------
 
+    /** Keymap files, macro files or folders with them: each file is recognized by its content. */
     private fun importKeymap() {
-        val descriptor = FileChooserDescriptorFactory.singleFile().withExtensionFilter("xml")
-            .withTitle("Import Keymap").withDescription("Choose an IntelliJ keymap .xml file")
-        val vf = FileChooser.chooseFile(descriptor, project, null) ?: return
-        KeymapEditing.importXml(project, VfsUtilCore.virtualToIoFile(vf))?.let {
-            reloadKeymaps(it)
-            statusLabel.text = "Imported keymap “${it.presentableName}” from ${vf.name}."
+        val descriptor = FileChooserDescriptorFactory.multiFilesOrDirs().withExtensionFilter("xml")
+            .withTitle("Import Keymap or Macros")
+            .withDescription("Choose keymap .xml files, a macros file, or a folder with them (an export folder)")
+        val chosen = FileChooser.chooseFiles(descriptor, project, null).map(VfsUtilCore::virtualToIoFile)
+        if (chosen.isEmpty()) return
+        val r = KeymapTransfer.import(project, chosen) ?: return
+        r.keymaps.lastOrNull()?.let { reloadKeymaps(it) }
+        MacroStore.getInstance().registerActions()
+        if (r.keymaps.isEmpty()) refresh(null)
+        val parts = buildList {
+            if (r.keymaps.isNotEmpty()) add("keymap(s) ${r.keymaps.joinToString(", ") { "“${it.presentableName}”" }}")
+            if (r.macrosAdded > 0) add("${r.macrosAdded} new macro(s)")
+            if (r.macrosReplaced > 0) add("${r.macrosReplaced} macro(s) replaced")
+        }
+        statusLabel.text = buildString {
+            append(if (parts.isEmpty()) "Nothing new imported" else "Imported " + parts.joinToString(", "))
+            if (r.macrosUnchanged > 0) append(" · ${r.macrosUnchanged} macro(s) already here")
+            if (r.ignoredFiles.isNotEmpty()) append(" · ${r.ignoredFiles.size} other file(s) ignored")
+            append(".")
         }
     }
 
@@ -586,14 +613,15 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         refresh(macro.actionId)
     }
 
+    /** Writes the selected keymap and all macros into a folder; Import on that folder brings both back. */
     private fun exportKeymap() {
         val keymap = selectedKeymap ?: return
-        val descriptor = FileSaverDescriptor("Export Keymap", "Save keymap as an IntelliJ keymap XML file", "xml")
-        val safeName = keymap.presentableName.replace(Regex("[^A-Za-z0-9._-]+"), "_")
-        val target = FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project).save("$safeName.xml") ?: return
-        KeymapEditing.writeXml(keymap, target.file)
-        statusLabel.text = "Exported “${keymap.presentableName}” to ${target.file.name}." +
-            if (keymap.parent != null) " It stores only changes on top of “${keymap.parent!!.presentableName}”." else ""
+        val descriptor = FileChooserDescriptorFactory.singleDir().withTitle("Export Keymap and Macros")
+            .withDescription("Choose a folder: the selected keymap and all macros are saved there")
+        val folder = FileChooser.chooseFile(descriptor, project, null)?.let(VfsUtilCore::virtualToIoFile) ?: return
+        val written = KeymapTransfer.export(project, keymap, folder) ?: return
+        statusLabel.text = "Exported ${written.joinToString(" and ") { it.name }} to ${folder.path}." +
+            if (keymap.parent != null) " The keymap stores only changes on top of “${keymap.parent!!.presentableName}”." else ""
     }
 
     private companion object {

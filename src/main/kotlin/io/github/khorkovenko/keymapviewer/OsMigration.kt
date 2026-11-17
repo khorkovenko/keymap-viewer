@@ -4,13 +4,11 @@ import com.intellij.openapi.actionSystem.KeyboardShortcut
 import com.intellij.openapi.actionSystem.MouseShortcut
 import com.intellij.openapi.actionSystem.Shortcut
 import com.intellij.openapi.keymap.Keymap
-import com.intellij.openapi.keymap.impl.KeymapImpl
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
 import com.intellij.openapi.util.SystemInfo
-import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBRadioButton
@@ -81,11 +79,7 @@ object OsMigration {
     }
 
     /** Actions the keymap itself changes (not inherited). A keymap without a parent "changes" everything. */
-    private fun ownActionIds(keymap: Keymap): List<String> {
-        val impl = keymap as? KeymapImpl
-        if (keymap.parent == null || impl == null) return emptyList()
-        return keymap.actionIdList.filter { impl.hasOwnActionId(it) }
-    }
+    private fun ownActionIds(keymap: Keymap): List<String> = KeymapData.ownActionIds(keymap) ?: emptyList()
 
     private fun translate(sc: Shortcut, swap: Boolean): Shortcut? = when (sc) {
         is KeyboardShortcut -> if (!swap) sc else KeyboardShortcut(swapCtrlMeta(sc.firstKeyStroke), sc.secondKeyStroke?.let(::swapCtrlMeta))

@@ -8,6 +8,8 @@ import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.actionSystem.ex.AnActionListener
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.project.ProjectManagerListener
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
@@ -63,7 +65,8 @@ object MacroRecorder {
         return SwingUtilities.isDescendingFrom(focus, inside)
     }
 
-    fun start(project: Project, onChange: (List<MacroStep>) -> Unit) {
+    /** @param onAbort called when the recording can't go on (its project is closing); the caller should stop it. */
+    fun start(project: Project, onAbort: () -> Unit = {}, onChange: (List<MacroStep>) -> Unit) {
         if (isRecording) return
         steps.clear()
         this.onChange = onChange
@@ -89,6 +92,10 @@ object MacroRecorder {
                     else steps += MacroStep.Typing(c.toString())
                     notifyChanged()
                 }
+            })
+            // Otherwise the recorder would stay "recording" (and Create Macro disabled) after the project is gone
+            subscribe(ProjectManager.TOPIC, object : ProjectManagerListener {
+                override fun projectClosing(closing: Project) { if (closing === project) onAbort() }
             })
         }
         // Opening a tool window by clicking its side-bar button is not an action, so listen for it separately
@@ -217,7 +224,7 @@ class MacroRecordingWindow(
             .setBelongsToGlobalPopupStack(false)
             .createPopup()
 
-        MacroRecorder.start(project) { steps ->
+        MacroRecorder.start(project, onAbort = { finish(keep = false) }) { steps ->
             val keepSelection = list.selectedIndex
             model.replaceAll(steps.map { it.describe() })
             if (keepSelection in 0 until model.size) list.selectedIndex = keepSelection

@@ -2,6 +2,30 @@
 
 All notable changes to Keymap Viewer are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.5] - 2026-11-17
+
+### Changed
+- **Export** now asks for a folder and saves the selected keymap plus a `keymap-viewer-macros.xml` with all your macros. The keymap file also carries its double-modifier shortcuts (Double Ctrl…); IntelliJ ignores that part, so it is still a normal keymap file.
+- **Import** accepts several files and folders at once. Each file is recognized by its content and added accordingly: keymap files become keymaps (with their double modifiers), macro files add their macros, and IntelliJ's own `macros.xml` adds its macros as plugin macros. Choosing an export folder brings back the keymap and all macros. If a macro with the same name but different steps already exists, you're asked whether to replace it.
+
+### Fixed
+- **OS detection:** keymaps whose name merely contains "mac" (for example "Emacs") were shown as macOS keymaps, and a keymap migrated from macOS to Windows could still show macOS. The built-in keymap a keymap is based on now decides first, then its shortcuts, and only then its name.
+- **Missed shortcuts:** actions run with a mouse shortcut (for example Ctrl+Click for Go to Declaration) were counted as missed shortcuts.
+- **Double modifiers:** Ctrl+Click twice in a row (or Shift/Alt) could trigger the action assigned to Double Ctrl. A mouse click between the two taps now cancels the double tap, also in the Edit Shortcut field.
+- **Typing shortcuts in the table:** a shortcut containing `;` or `|` as its key (for example `Ctrl+;`) was split in two and couldn't be saved; `Ctrl+_` was read as `Ctrl+-`.
+- **Macros:**
+  - If the project was closed while recording, Create Macro stayed disabled until the IDE was restarted.
+  - Pressing ↑/↓ in the action chooser when the search matched nothing caused an error.
+  - Renaming or deleting a macro left its double-modifier shortcut behind; deleting one added an empty entry to every custom keymap.
+  - Registering macros when several projects open at once could fail.
+- The table now updates when shortcuts are changed in Settings | Keymap while the tool window is open, and keeps the selected row.
+- Export (.md, keymap and macros) shows a message if a file can't be written instead of an error report.
+- Keymap names containing `<` or `&` no longer break the info line.
+
+### Compatibility
+- Export and Migrate to OS no longer use an IDE implementation class (`KeymapImpl`) to find the shortcuts a keymap changes; they use the public keymap API, which makes the plugin safer for future IDE versions.
+- Checked with JetBrains' Plugin Verifier against IntelliJ IDEA 2025.1–2026.3: compatible, no deprecated, experimental or internal API usage.
+
 ## [1.0.4] - 2026-11-17
 
 ### Fixed

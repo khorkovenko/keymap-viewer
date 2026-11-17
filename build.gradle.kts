@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.github.khorkovenko.keymapviewer"
-version = "1.0.4"
+version = "1.0.5"
 
 repositories {
     mavenCentral()
@@ -34,6 +34,19 @@ intellijPlatform {
         }
         // Shown on the Marketplace page and in the IDE's update dialog (full history: CHANGELOG.md)
         changeNotes = """
+            <p><b>1.0.5</b></p>
+            <ul>
+              <li>Export saves the selected keymap and all macros into a folder (double-modifier shortcuts included).</li>
+              <li>Import accepts keymap files, macro files (also IntelliJ's macros.xml) or a whole folder; each file is
+                  recognized automatically, so importing an export folder brings back the keymap and its macros.</li>
+              <li>Fixed: keymaps such as "Emacs" were shown as macOS keymaps; OS detection now trusts the built-in keymap
+                  a keymap is based on before its name.</li>
+              <li>Fixed: mouse shortcuts (Ctrl+Click) were counted as missed shortcuts; Ctrl+Click twice could trigger Double Ctrl.</li>
+              <li>Fixed: typing a shortcut with ";" or "|" as its key (Ctrl+;) in the table.</li>
+              <li>Fixed: Create Macro stayed disabled after closing a project while recording; an error in the action chooser.</li>
+              <li>The table updates when shortcuts change in Settings | Keymap.</li>
+              <li>Better compatibility with future IDE versions: no IDE implementation classes for export and migration.</li>
+            </ul>
             <p><b>1.0.4</b></p>
             <ul>
               <li>Fixed: when adding a macro step by hand near the bottom of the screen, the suggestion list covered the text

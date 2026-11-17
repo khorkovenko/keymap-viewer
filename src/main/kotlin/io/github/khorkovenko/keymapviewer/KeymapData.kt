@@ -84,13 +84,16 @@ object KeymapData {
      * so we walk up the parent chain until we find a recognisable name.
      */
     fun detectTargetOs(keymap: Keymap): TargetOs {
-        var k: Keymap? = keymap
-        while (k != null) {
-            // Some parents only say "Windows" in their display name, not their internal name
-            (osFromName(k.name) ?: osFromName(k.presentableName))?.let { return it }
-            k = k.parent
-        }
-        return guessFromShortcuts(keymap) ?: TargetOs.UNKNOWN
+        val chain = generateSequence(keymap) { it.parent }.take(32).toList()
+        // Some parents only say "Windows" in their display name, not their internal name
+        fun named(k: Keymap) = osFromName(k.name) ?: osFromName(k.presentableName)
+        // 1. The built-in keymap it is based on is the most reliable sign: custom names are free text
+        //    ("macOS copy (Windows / Linux)" is a Windows keymap made from a macOS one)
+        chain.filter { !it.canModify() }.firstNotNullOfOrNull(::named)?.let { return it }
+        // 2. No built-in ancestor says: look at the shortcuts themselves
+        guessFromShortcuts(keymap)?.let { return it }
+        // 3. Last resort: the custom names
+        return chain.filter { it.canModify() }.firstNotNullOfOrNull(::named) ?: TargetOs.UNKNOWN
     }
 
     /**
@@ -119,11 +122,24 @@ object KeymapData {
     fun osFromName(name: String): TargetOs? {
         val n = name.lowercase()
         return when {
-            "mac" in n -> TargetOs.MAC
+            // Whole words only: "Emacs" and "My machine" are not macOS keymaps
+            MAC_NAME.containsMatchIn(n) -> TargetOs.MAC
             listOf("xwin", "gnome", "kde", "linux").any { it in n } -> TargetOs.LINUX
             n == "\$default" || "windows" in n -> TargetOs.WINDOWS_LINUX
             else -> null
         }
+    }
+
+    private val MAC_NAME = Regex("""\bmac(os)?\b|\bosx\b|\bos x\b""")
+
+    /**
+     * Actions whose shortcuts differ from the parent keymap's (changed, added or removed there), or null for a
+     * keymap without a parent. Uses only the public Keymap API.
+     */
+    fun ownActionIds(keymap: Keymap): List<String>? {
+        val parent = keymap.parent ?: return null
+        return (keymap.actionIdList + parent.actionIdList).distinct()
+            .filter { !keymap.getShortcuts(it).contentEquals(parent.getShortcuts(it)) }
     }
 
     /** Human-readable action name; falls back to the ID for actions that only get a name at runtime. */

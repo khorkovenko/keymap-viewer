@@ -21,6 +21,7 @@ import java.awt.KeyboardFocusManager
 import java.awt.Toolkit
 import java.awt.event.AWTEventListener
 import java.awt.event.KeyEvent
+import java.awt.event.MouseEvent
 import javax.swing.KeyStroke
 
 /**
@@ -118,6 +119,15 @@ class DoubleModifierStore : PersistentStateComponent<DoubleModifierStore.Data>, 
         apply()
     }
 
+    /** An action got a new ID (a renamed macro), or with [toId] null was deleted: its double modifiers follow. */
+    fun moveAction(fromId: String, toId: String?) {
+        val mine = parse().filter { it.second == fromId }
+        if (mine.isEmpty()) return
+        data.entries.removeAll { e -> e.split('\t').getOrNull(1) == fromId }
+        if (toId != null) mine.forEach { (keymap, _, code) -> data.entries.add("$keymap\t$toId\t$code") }
+        apply()
+    }
+
     /** Re-reads which actions the active keymap binds to double modifiers. */
     fun apply() {
         val active = KeymapManager.getInstance()?.activeKeymap?.name
@@ -140,6 +150,11 @@ class DoubleModifierStore : PersistentStateComponent<DoubleModifierStore.Data>, 
     private var lastTapTime = 0L
 
     private val tapListener = AWTEventListener { event ->
+        if (event is MouseEvent) {
+            // Ctrl+Click, Ctrl+Click (or scrolling with Ctrl held) is not a double tap of Ctrl
+            if (event.id == MouseEvent.MOUSE_PRESSED || event.id == MouseEvent.MOUSE_WHEEL) { tapCandidate = null; lastTapKey = null }
+            return@AWTEventListener
+        }
         val e = event as? KeyEvent ?: return@AWTEventListener
         if (activeBindings.isEmpty()) return@AWTEventListener
         if (e.keyCode !in DoubleModifier.modifierKeys) {
@@ -173,7 +188,8 @@ class DoubleModifierStore : PersistentStateComponent<DoubleModifierStore.Data>, 
 
     init {
         // Declared after the listener property: Kotlin initializes properties and init blocks in order
-        Toolkit.getDefaultToolkit().addAWTEventListener(tapListener, AWTEvent.KEY_EVENT_MASK)
+        Toolkit.getDefaultToolkit().addAWTEventListener(tapListener,
+            AWTEvent.KEY_EVENT_MASK or AWTEvent.MOUSE_EVENT_MASK or AWTEvent.MOUSE_WHEEL_EVENT_MASK)
     }
 
     private fun runBound(keyCode: Int, e: KeyEvent) {

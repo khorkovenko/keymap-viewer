@@ -379,6 +379,7 @@ private class ActionChooserDialog(parent: JComponent, private val initial: Strin
         search.textEditor.addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
                 val d = when (e.keyCode) { KeyEvent.VK_DOWN -> 1; KeyEvent.VK_UP -> -1; else -> return }
+                if (model.size == 0) return // nothing matches the search
                 list.selectedIndex = (list.selectedIndex + d).coerceIn(0, model.size - 1)
                 list.ensureIndexIsVisible(list.selectedIndex)
                 e.consume()

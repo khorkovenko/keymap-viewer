@@ -17,6 +17,7 @@ class ActionCategories private constructor(
     fun of(actionId: String): String = byId[actionId] ?: fallback(actionId)
 
     private fun fallback(id: String): String = when {
+        id.startsWith(MacroStore.PREFIX) -> MACROS
         id.startsWith("Editor") || id.startsWith("\$") -> EDITOR
         id.contains("Debug", true) || id.startsWith("XDebugger") || id.startsWith("Step") -> DEBUGGER
         id.startsWith("Vcs") || id.startsWith("Git") || id.startsWith("ChangesView") || id.startsWith("Diff") -> VCS
@@ -25,6 +26,7 @@ class ActionCategories private constructor(
     }
 
     companion object {
+        const val MACROS = "Macros"
         const val EDITOR = "Editor"
         const val DEBUGGER = "Debugger"
         const val VCS = "Version Control"
@@ -49,7 +51,7 @@ class ActionCategories private constructor(
                 if (name !in menuOrder) menuOrder += name
                 collect(top, name, 0)
             }
-            val order = menuOrder + listOf(EDITOR, DEBUGGER, VCS, TOOL_WINDOWS, OTHER).filter { it !in menuOrder }
+            val order = menuOrder + listOf(MACROS, EDITOR, DEBUGGER, VCS, TOOL_WINDOWS, OTHER).filter { it !in menuOrder }
             return ActionCategories(byId, order)
         }
     }

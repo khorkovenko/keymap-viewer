@@ -18,6 +18,8 @@
             <li>Export the assigned shortcuts of a keymap to a Markdown file</li>
             <li>Import and export keymaps as IntelliJ keymap XML files</li>
             <li>Migrate a keymap to another OS in one step (Ctrl ↔ ⌘ translated)</li>
+            <li>Missed shortcuts: when you run an action with the mouse although it has a shortcut, a red count badge appears on the Keymap Viewer side-bar icon and on its Missed Shortcuts button; click the button to see what you missed</li>
+            <li>Record macros: actions and typing are listed live while recording; edit the steps afterwards and give the macro a shortcut</li>
             <li>Markdown view grouped by menu (Edit, View, Navigate…)</li>
             <li>Compact icon toolbar; maximize the tool window or open it in its own (fullscreen-capable) window</li>
         </ul>

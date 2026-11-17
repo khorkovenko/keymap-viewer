@@ -1,5 +1,6 @@
 package io.github.khorkovenko.keymapviewer
 
+import com.intellij.ide.KeyboardAwareFocusOwner
 import com.intellij.openapi.actionSystem.KeyboardShortcut
 import com.intellij.openapi.actionSystem.MouseShortcut
 import com.intellij.openapi.actionSystem.Shortcut
@@ -16,7 +17,7 @@ import java.awt.event.MouseWheelEvent
  *    Alt+Right Click or Ctrl+Wheel Up. A plain single left click only focuses the field.
  * Plain Backspace/Delete clears the field; plain Enter/Esc confirm/cancel the dialog.
  */
-class ShortcutCaptureField(private val render: (Shortcut) -> String) : JBTextField() {
+class ShortcutCaptureField(private val render: (Shortcut) -> String) : JBTextField(), KeyboardAwareFocusOwner {
 
     /** What was performed, in this computer's modifier convention (translation happens in [ShortcutInput]). */
     var shortcut: Shortcut? = null
@@ -64,6 +65,16 @@ class ShortcutCaptureField(private val render: (Shortcut) -> String) : JBTextFie
         }
         addMouseListener(mouse)
         addMouseWheelListener(mouse)
+    }
+
+    /**
+     * The IDE runs keymap shortcuts (Ctrl+C → Copy…) before the focused component sees the key, so a shortcut
+     * that's already assigned could never be recorded. This tells the IDE to leave keys to the field, except
+     * plain Enter / Esc, which still save / cancel the dialog.
+     */
+    override fun skipKeyEventDispatcher(event: KeyEvent): Boolean {
+        val plain = event.modifiersEx and MODIFIERS == 0
+        return !(plain && (event.keyCode == KeyEvent.VK_ENTER || event.keyCode == KeyEvent.VK_ESCAPE))
     }
 
     override fun processKeyEvent(e: KeyEvent) {

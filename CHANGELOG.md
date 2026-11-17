@@ -2,6 +2,48 @@
 
 All notable changes to Keymap Viewer are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.3] - 2026-11-17
+
+### Added
+- **Macros:** a new **Create Macro…** icon in the toolbar.
+  1. Choose where the macro goes from a searchable list: **New macro…** or an existing macro (to re-record, edit its steps or delete it), and give it a name.
+  2. Press **Record**. The dialog closes and a small recording window appears in the corner of the IDE. It lists, as you go:
+     - every action you run (by shortcut, menu or toolbar)
+     - the text you type in editors
+     - tool windows you open, including by clicking their side-bar buttons
+
+     Actions the IDE runs on its own (without a key press or click from you) are not recorded.
+
+     The recording window has:
+     - **Pause / Continue:** nothing is recorded while paused.
+     - **Remove:** removes the selected step (or press Delete).
+     - A field for **adding steps by hand**, with suggestions as you type: an action name or ID, `type: text` or `window: name`.
+     - **Discard:** throws the recording away; it asks first if steps were recorded.
+     - **Stop & Review:** opens the Save Macro window.
+  3. Press **Stop**. The Save Macro dialog shows the macro choice, the recorded steps and a shortcut field.
+     - Steps can be edited (double-click), added (an action from a searchable list, or text to type), removed and reordered.
+     - The shortcut field works like the shortcut editor: press keys, a mouse click or a double modifier, and conflicts are checked.
+  4. Saved macros become IDE actions named "Macro: <name>". They appear in the table (in a "Macros" block in the Markdown view) and in Find Action, and their shortcuts are stored in the selected keymap.
+- **IntelliJ's own macros** (made with Edit | Macros) are listed in the macro chooser, marked "IntelliJ macro".
+  - **Copy and Edit…** turns one into a plugin macro you can edit and give a shortcut; the original stays untouched.
+  - **Record as New** records a new macro with that name.
+  - They are read from the IDE's `options/macros.xml`, which the IDE writes when it saves settings.
+- New step type **Press key** (for example Enter in a popup), used by IntelliJ macros. Add one by typing `key: Enter` or `key: Ctrl+S`.
+- The plugin has its own macro recorder, because IntelliJ's built-in macro system is internal API. Macros are stored in `keymapViewerMacros.xml` and work while the plugin is installed.
+
+- **Missed shortcuts:** a new **Missed Shortcuts** button at the end of the toolbar.
+  - When you run an action with the mouse (menu, toolbar, context menu or a side-bar button) although your active keymap has a keyboard shortcut for it, a red count badge appears on that button and on the Keymap Viewer icon in the side bar.
+  - Clicking the button opens the **Missed Shortcuts** dialog: shortcut, action, how many times you missed it and when, with Clear List and Remove Selected.
+  - Opening the dialog clears the badge.
+
+- **Edit Shortcut** now asks right away what to do when another action already uses the shortcut you pressed: remove it from the other action(s) and assign it here (default), keep both, or decide for each one after saving (remove, keep or give it a new shortcut).
+
+### Fixed
+- Shortcuts that are already assigned in the active keymap (for example Ctrl+C) couldn't be recorded in the Edit Shortcut field: the IDE ran the shortcut instead. The field now receives every key except plain Enter and Esc.
+
+### Changed
+- Replaced the last API scheduled for removal (drop-down list renderers). The plugin now passes JetBrains' compatibility check for IntelliJ 2025.1–2026.3 without warnings.
+
 ## [1.0.2] - 2026-11-16
 
 ### Fixed

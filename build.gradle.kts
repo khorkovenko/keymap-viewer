@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.github.khorkovenko.keymapviewer"
-version = "1.0.2"
+version = "1.0.3"
 
 repositories {
     mavenCentral()
@@ -34,6 +34,18 @@ intellijPlatform {
         }
         // Shown on the Marketplace page and in the IDE's update dialog (full history: CHANGELOG.md)
         changeNotes = """
+            <p><b>1.0.3</b></p>
+            <ul>
+              <li>New: <b>macros</b>. Click the macro icon, pick a new or existing macro, press Record and use the IDE: a small
+                  window lists every recorded action and typed text. Press Stop to review the steps (edit, reorder, add, remove),
+                  then save the macro with a shortcut. Macros appear as "Macro: name" actions in the table and in Find Action.</li>
+              <li>New: <b>missed shortcuts</b>. When you use the mouse for an action that has a shortcut, a red count badge appears
+                  on the Keymap Viewer side-bar icon and on the Missed Shortcuts toolbar button, which lists what you missed.</li>
+              <li>New: IntelliJ's own macros are listed in the macro chooser and can be copied into an editable plugin macro.</li>
+              <li>New: Edit Shortcut asks right away what to do when another action already uses the shortcut: remove it from
+                  the other action(s), keep both, or decide one by one.</li>
+              <li>Fixed: shortcuts already assigned in the active keymap (for example Ctrl+C) can now be recorded in Edit Shortcut.</li>
+            </ul>
             <p><b>1.0.2</b></p>
             <ul>
               <li>Fixed: with "Show all actions" off, actions that share another action's shortcut were missing, so the assigned count was too low</li>

@@ -262,7 +262,7 @@ private class NewKeymapDialog(
 
     private val nameField = JBTextField(defaultName, 28)
     private val osCombo = ComboBox(arrayOf(TargetOs.MAC, TargetOs.WINDOWS_LINUX, TargetOs.LINUX)).apply {
-        renderer = SimpleListCellRenderer.create { label, os, _ -> label.text = os?.label ?: "" }
+        renderer = textRenderer<TargetOs> { it.label }
         selectedItem = when {
             ShortcutFormatter.currentOsIsMac -> TargetOs.MAC
             com.intellij.openapi.util.SystemInfo.isWindows -> TargetOs.WINDOWS_LINUX

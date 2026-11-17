@@ -17,9 +17,16 @@ import javax.swing.Action
 import javax.swing.ButtonGroup
 import javax.swing.JComponent
 
+/** What to do with other actions that already use the new shortcut. */
+enum class ConflictChoice { REMOVE_FROM_OTHERS, KEEP_BOTH, REVIEW }
+
 /** What the user decided in [ShortcutEditDialog]. */
 sealed interface EditResult {
-    data class Assign(val shortcut: Shortcut, val replaceExisting: Boolean) : EditResult
+    data class Assign(
+        val shortcut: Shortcut,
+        val replaceExisting: Boolean,
+        val onConflict: ConflictChoice = ConflictChoice.REMOVE_FROM_OTHERS,
+    ) : EditResult
     data object RemoveAll : EditResult
 }
 
@@ -46,7 +53,14 @@ class ShortcutEditDialog(
         keymap, os, actionId,
         emptyHint = if (currentAll.isEmpty()) "Nothing pressed yet."
         else "Field is empty. Saving will ask whether to remove the current shortcut(s) or restore them.",
-    ) { syncReplaceOptions() }
+    ) { syncReplaceOptions(); syncConflictOptions() }
+
+    // Shown only when another action already uses the shortcut in the field
+    private val conflictTitle = JBLabel("Other actions using it:")
+    private val moveRadio = JBRadioButton("Remove it from them and assign it here", true)
+    private val keepRadio = JBRadioButton("Keep both (the current context decides which runs)")
+    private val reviewRadio = JBRadioButton("Decide for each one after saving: remove, keep or give it a new shortcut")
+
     private val replaceRadio = JBRadioButton("Replace current shortcut(s)", true)
     private val addRadio = JBRadioButton("Add as an additional shortcut")
 
@@ -56,10 +70,28 @@ class ShortcutEditDialog(
     init {
         title = "Edit Shortcut"
         ButtonGroup().apply { add(replaceRadio); add(addRadio) }
+        ButtonGroup().apply { add(moveRadio); add(keepRadio); add(reviewRadio) }
         setOKButtonText("Save")
         (currentKeyboard.firstOrNull() ?: currentMouse.firstOrNull())?.let(input::preset)
         init()
         syncReplaceOptions()
+        syncConflictOptions()
+    }
+
+    private fun syncConflictOptions() {
+        val conflicts = input.conflicts
+        listOf(conflictTitle, moveRadio, keepRadio, reviewRadio).forEach { it.isVisible = conflicts.isNotEmpty() }
+        if (conflicts.isEmpty()) return
+        val names = conflicts.keys.take(3).joinToString(", ") { KeymapData.actionName(it) }
+        val more = if (conflicts.size > 3) " and ${conflicts.size - 3} more" else ""
+        moveRadio.text = "Remove it from $names$more and assign it here"
+        if (isShowing) pack() // make room for the options
+    }
+
+    private val conflictChoice get() = when {
+        keepRadio.isSelected -> ConflictChoice.KEEP_BOTH
+        reviewRadio.isSelected -> ConflictChoice.REVIEW
+        else -> ConflictChoice.REMOVE_FROM_OTHERS
     }
 
     /** Existing shortcuts of the same kind (keyboard or mouse) as the one in the field. */
@@ -86,6 +118,8 @@ class ShortcutEditDialog(
             .addVerticalGap(8)
         input.addTo(builder, "Shortcut:")
         builder.addVerticalGap(4).addComponentToRightColumn(replaceRadio).addComponentToRightColumn(addRadio)
+            .addVerticalGap(4).addComponentToRightColumn(conflictTitle)
+            .addComponentToRightColumn(moveRadio).addComponentToRightColumn(keepRadio).addComponentToRightColumn(reviewRadio)
         return builder.panel.apply { border = JBUI.Borders.empty(4); preferredSize = JBUI.size(560, preferredSize.height) }
     }
 
@@ -104,7 +138,8 @@ class ShortcutEditDialog(
     override fun doOKAction() {
         val sc = input.shortcut
         if (sc != null) {
-            result = EditResult.Assign(sc, replaceExisting = sameKind(sc).isNotEmpty() && replaceRadio.isSelected)
+            result = EditResult.Assign(sc, replaceExisting = sameKind(sc).isNotEmpty() && replaceRadio.isSelected,
+                onConflict = conflictChoice)
             return super.doOKAction()
         }
 

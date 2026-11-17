@@ -122,7 +122,7 @@ private class MigrateDialog(
         else -> TargetOs.LINUX
     }
     private val osCombo = ComboBox(arrayOf(TargetOs.MAC, TargetOs.WINDOWS_LINUX, TargetOs.LINUX)).apply {
-        renderer = SimpleListCellRenderer.create { label, os, _ -> label.text = os?.label ?: "" }
+        renderer = textRenderer<TargetOs> { it.label }
         // Default: this machine's OS if the keymap is for another one, otherwise the "other" family
         selectedItem = when {
             machineOs != sourceOs -> machineOs

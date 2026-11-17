@@ -71,6 +71,16 @@ class ConflictResolver(
         }
     }
 
+    /** Applies a choice already made in the edit dialog. @return false if the user chose to undo everything. */
+    fun resolve(conflicts: List<Conflict>, choice: ConflictChoice): Boolean {
+        if (conflicts.isEmpty()) return true
+        return when (choice) {
+            ConflictChoice.REMOVE_FROM_OTHERS -> { conflicts.forEach { session.remove(it.actionId, it.shortcut, true) }; true }
+            ConflictChoice.KEEP_BOTH -> { session.keptConflicts += conflicts.size; true }
+            ConflictChoice.REVIEW -> reviewOneByOne(conflicts)
+        }
+    }
+
     private fun reviewOneByOne(initial: List<Conflict>): Boolean {
         val queue = ArrayDeque(initial)
         val seen = initial.toMutableSet()

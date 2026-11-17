@@ -6,6 +6,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.IconLoader
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ToolWindowManager
@@ -13,6 +14,20 @@ import com.intellij.openapi.wm.ToolWindowType
 import com.intellij.ui.content.ContentFactory
 
 class KeymapToolWindowFactory : ToolWindowFactory, DumbAware {
+
+    /** The side-bar icon gets a red count badge while there are missed shortcuts you haven't looked at. */
+    override fun init(toolWindow: ToolWindow) {
+        val base = IconLoader.getIcon("/icons/keymapToolWindow.svg", KeymapToolWindowFactory::class.java)
+        val store = MissedShortcutStore.getInstance()
+        fun update() {
+            val unseen = store.unseen
+            toolWindow.setIcon(CountBadgeIcon.of(base, unseen))
+            toolWindow.stripeTitle = if (unseen > 0) "Keymap Viewer ($unseen missed shortcuts)" else "Keymap Viewer"
+        }
+        update()
+        store.addListener(toolWindow.disposable) { update() }
+    }
+
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = KeymapPanel(project)
         val content = ContentFactory.getInstance().createContent(panel, "", false)

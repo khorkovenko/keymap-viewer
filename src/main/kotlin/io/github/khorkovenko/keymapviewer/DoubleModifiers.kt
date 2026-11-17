@@ -197,5 +197,8 @@ class DoubleModifierStore : PersistentStateComponent<DoubleModifierStore.Data>, 
 class DoubleModifierStartup : ProjectActivity {
     override suspend fun execute(project: Project) {
         DoubleModifierStore.getInstance().apply()
+        MacroStore.getInstance().registerActions() // saved macros become actions with their shortcuts
+        MissedShortcutStore.getInstance() // starts counting missed shortcuts
+        MissedShortcutTracker.install(project) // side-bar button clicks count too
     }
 }

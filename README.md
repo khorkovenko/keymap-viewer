@@ -21,6 +21,10 @@ An IntelliJ Platform plugin for browsing, editing and moving keymaps between ope
   - view the keymap as rendered Markdown, grouped by menu (Edit, View, Navigate…)
   - export the assigned shortcuts to a `.md` file
 - **Keymap files:** import and export keymaps in IntelliJ's own `.xml` format.
+- **Macros:**
+  - record actions and typing, watching each step appear in a small recording window
+  - edit, reorder, add or remove steps afterwards
+  - save the macro as an action ("Macro: <name>") with a shortcut
 
 Open it from **View | Tool Windows | Keymap Viewer**.
 
@@ -56,6 +60,9 @@ src/main/kotlin/io/github/khorkovenko/keymapviewer/
     KeymapEditing.kt            copy / new / delete keymaps, XML import and export
     OsMigration.kt              migrate a keymap to another OS
     DoubleModifiers.kt          stores and runs double-modifier shortcuts
+    Macros.kt                   macro storage, macro actions and playback
+    MacroRecorder.kt            records actions and typing; the floating recording window
+    MacroDialogs.kt             Create Macro / Save Macro dialogs and the action picker
     MarkdownExporter.kt / MarkdownPreview.kt   Markdown export and rendered view
 ```
 

@@ -56,10 +56,9 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
     // shortcut map, so live objects in a Swing model break selection once a keymap is copied or edited.
     private val keymapModel = DefaultComboBoxModel<String>()
     private val keymapCombo = ComboBox(keymapModel).apply {
-        renderer = SimpleListCellRenderer.create { label, name, _ ->
-            label.text = if (name == null) "" else
-                (KeymapData.findKeymap(name)?.presentableName ?: name) +
-                    (if (name == KeymapData.activeKeymap().name) "  (active)" else "")
+        renderer = textRenderer<String> { name ->
+            (KeymapData.findKeymap(name)?.presentableName ?: name) +
+                (if (name == KeymapData.activeKeymap().name) "  (active)" else "")
         }
     }
     private val showAllBox = JBCheckBox("Show all actions", PropertiesComponent.getInstance().getBoolean(SHOW_ALL_KEY, true)).apply {
@@ -111,6 +110,11 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         add(iconAction("Export Keymap…", "Save the selected keymap as an IntelliJ keymap .xml file", AllIcons.ToolbarDecorator.Export) { exportKeymap() })
         add(iconAction("Migrate to OS…", "Create a copy of the selected keymap for another OS (Ctrl ↔ ⌘ translated)",
             AllIcons.Actions.SwapPanels) { migrateKeymap() })
+        addSeparator()
+        add(iconAction("Create Macro…", "Record a macro (actions and typing), edit its steps and give it a shortcut",
+            AllIcons.Ide.Macro.Recording_1, enabled = { _, _ -> !MacroRecorder.isRecording }) { createMacro() })
+        addSeparator()
+        add(ShowMissedShortcutsAction()) // red count badge while there are misses you haven't looked at
     }, true)
 
     /** A toolbar icon button; [enabled] decides from the selected keymap and its summary whether it can be clicked. */
@@ -156,6 +160,7 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         // Icon buttons with tooltips (same order in every layout). They sit right after the drop-down and
         // wrap to the next line only if the tool window is very narrow.
         toolbar.targetComponent = this
+        MissedShortcutStore.getInstance().addListener(this) { toolbar.updateActionsAsync() } // badge count
         // Drop-down + icon buttons on one line, vertically centered; the icons move to a second line only
         // when the tool window is too narrow for both.
         val controls = CompactRow(LineWrapLayout(JBUI.scale(6), JBUI.scale(2))).apply {
@@ -417,7 +422,8 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
 
                 val conflicts = ShortcutInput.conflictsOf(keymap, actionId, sc)
                     .flatMap { (id, list) -> list.map { Conflict(id, it) } }
-                val kept = ConflictResolver(project, session, os).resolve(actionId, sc, conflicts)
+                // The dialog already asked what to do with actions that use it too
+                val kept = ConflictResolver(project, session, os).resolve(conflicts, result.onConflict)
                 statusLabel.text = if (!kept) "Change undone." else buildString {
                     append("Assigned ${ShortcutFormatter.format(sc, os.isMac)} to $name")
                     if (session.removedFromOthers > 0) append(" · removed from ${session.removedFromOthers} other action(s)")
@@ -512,6 +518,72 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
             if (r.skipped > 0) append(" · ${r.skipped} gesture shortcut(s) skipped")
             append(".")
         }
+    }
+
+    // ---- macros ----------------------------------------------------------------------------------
+
+    /** Create Macro: choose the macro → Record → (recording window) → Stop → review steps and shortcut → Save. */
+    private fun createMacro() {
+        val start = MacroStartDialog(project)
+        start.show()
+        val existing = start.chooser.existing
+        when (start.exitCode) {
+            com.intellij.openapi.ui.DialogWrapper.OK_EXIT_CODE -> {
+                val name = start.chooser.name
+                MacroRecordingWindow(project, name) { steps -> saveMacro(existing, name, steps) }.show()
+                statusLabel.text = "Recording “$name”… use the IDE as usual, then press Stop in the recording window."
+            }
+            MACRO_EDIT_EXIT -> {
+                val ide = start.chooser.ideMacro
+                if (ide != null) saveMacro(null, start.chooser.name, ide.steps) // a copy; IntelliJ's original is untouched
+                else MacroStore.getInstance().get(existing ?: return)?.let { saveMacro(it.name, it.name, it.steps) }
+            }
+            MACRO_DELETE_EXIT -> {
+                val name = existing ?: return
+                if (Messages.showYesNoDialog(project, "Delete macro “$name” and its shortcuts in all keymaps?", "Delete Macro",
+                        "Delete", "Cancel", Messages.getWarningIcon()) == Messages.YES) {
+                    MacroStore.getInstance().remove(name)
+                    statusLabel.text = "Deleted macro “$name”."
+                    refresh()
+                }
+            }
+        }
+    }
+
+    /** Opens the review dialog for recorded/edited steps and saves the macro and its shortcut. */
+    private fun saveMacro(existing: String?, name: String, steps: List<MacroStep>) {
+        val original = selectedKeymap ?: return
+        val os = KeymapData.detectTargetOs(original)
+        val dialog = MacroEditDialog(project, original, os, existing, name, steps)
+        if (!dialog.showAndGet()) {
+            statusLabel.text = if (existing == null) "Macro discarded." else "Macro “$existing” unchanged."
+            return
+        }
+        val macro = Macro(dialog.chooser.name, dialog.steps)
+        MacroStore.getInstance().save(macro, dialog.chooser.existing)
+
+        val sc = dialog.shortcut
+        val keymapForShortcut = if (sc != null || dialog.shortcutCleared) KeymapEditing.ensureEditable(project, original) else original
+        var shortcutText = ""
+        if (keymapForShortcut != null && (sc != null || dialog.shortcutCleared)) {
+            if (keymapForShortcut.name != original.name) reloadKeymaps(keymapForShortcut)
+            val current = KeymapData.shortcutsOf(keymapForShortcut, macro.actionId)
+            if (sc == null || sc !in current) {
+                val session = KeymapEditSession(keymapForShortcut)
+                current.forEach { session.remove(macro.actionId, it) }
+                if (sc != null) {
+                    session.add(macro.actionId, sc)
+                    val conflicts = ShortcutInput.conflictsOf(keymapForShortcut, macro.actionId, sc)
+                        .flatMap { (id, list) -> list.map { Conflict(id, it) } }
+                    ConflictResolver(project, session, os).resolve(macro.actionId, sc, conflicts)
+                }
+            }
+            KeymapData.shortcutsOf(keymapForShortcut, macro.actionId).firstOrNull()?.let {
+                shortcutText = " · shortcut ${ShortcutFormatter.format(it, os.isMac)}"
+            }
+        }
+        statusLabel.text = "Saved macro “${macro.name}” (${macro.steps.size} steps)$shortcutText."
+        refresh(macro.actionId)
     }
 
     private fun exportKeymap() {

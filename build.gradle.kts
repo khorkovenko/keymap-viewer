@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.github.khorkovenko.keymapviewer"
-version = "1.0.3"
+version = "1.0.4"
 
 repositories {
     mavenCentral()
@@ -34,6 +34,11 @@ intellijPlatform {
         }
         // Shown on the Marketplace page and in the IDE's update dialog (full history: CHANGELOG.md)
         changeNotes = """
+            <p><b>1.0.4</b></p>
+            <ul>
+              <li>Fixed: when adding a macro step by hand near the bottom of the screen, the suggestion list covered the text
+                  field. It now opens above the field when there is no room below. The same applies to shortcut suggestions in the table.</li>
+            </ul>
             <p><b>1.0.3</b></p>
             <ul>
               <li>New: <b>macros</b>. Click the macro icon, pick a new or existing macro, press Record and use the IDE: a small

@@ -2,6 +2,11 @@
 
 All notable changes to Keymap Viewer are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.4] - 2026-11-17
+
+### Fixed
+- When adding a macro step by hand (in the recording window or the Save Macro dialog) near the bottom of the screen, the suggestion list opened on top of the text field and hid what you typed. It now opens above the field when there is no room below. Shortcut suggestions in the table's Shortcut cell behave the same way.
+
 ## [1.0.3] - 2026-11-17
 
 ### Added

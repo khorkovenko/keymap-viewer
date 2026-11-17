@@ -3,7 +3,6 @@ package io.github.khorkovenko.keymapviewer
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.CollectionListModel
-import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextField
@@ -114,9 +113,10 @@ class ShortcutCellEditor(
                 .setCancelOnClickOutside(true)
                 .setMinSize(JBUI.size(field.width.coerceAtLeast(180), 10))
                 .createPopup()
-            popup!!.show(RelativePoint(field, Point(0, field.height)))
+            placeNextTo(popup!!, field)
         } else {
             popup!!.pack(false, true)
+            placeNextTo(popup!!, field) // keeps it attached to the field when its height changes
         }
     }
 

@@ -150,9 +150,10 @@ class MacroStepInput(private val project: Project, private val onAdd: (MacroStep
                 .setCancelOnClickOutside(true)
                 .setMinSize(JBUI.size(field.width.coerceAtLeast(260), 10))
                 .createPopup()
-            popup!!.showUnderneathOf(field)
+            placeNextTo(popup!!, field)
         } else {
             popup!!.pack(false, true)
+            placeNextTo(popup!!, field) // keeps it attached to the field when its height changes
         }
     }
 

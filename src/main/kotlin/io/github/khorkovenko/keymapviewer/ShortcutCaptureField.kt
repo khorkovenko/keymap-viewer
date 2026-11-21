@@ -4,7 +4,7 @@ import com.intellij.ide.KeyboardAwareFocusOwner
 import com.intellij.openapi.actionSystem.KeyboardShortcut
 import com.intellij.openapi.actionSystem.MouseShortcut
 import com.intellij.openapi.actionSystem.Shortcut
-import com.intellij.ui.components.JBTextField
+import com.intellij.ui.components.fields.ExtendableTextField
 import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -17,7 +17,7 @@ import java.awt.event.MouseWheelEvent
  *    Alt+Right Click or Ctrl+Wheel Up. A plain single left click only focuses the field.
  * Plain Backspace/Delete clears the field; plain Enter/Esc confirm/cancel the dialog.
  */
-class ShortcutCaptureField(private val render: (Shortcut) -> String) : JBTextField(), KeyboardAwareFocusOwner {
+class ShortcutCaptureField(private val render: (Shortcut) -> String) : ExtendableTextField(), KeyboardAwareFocusOwner {
 
     /** What was performed, in this computer's modifier convention (translation happens in [ShortcutInput]). */
     var shortcut: Shortcut? = null
@@ -39,6 +39,7 @@ class ShortcutCaptureField(private val render: (Shortcut) -> String) : JBTextFie
     )
 
     init {
+        installDoubleTapGuard()
         isEditable = false
         focusTraversalKeysEnabled = false
         emptyText.text = "Press keys, or click here with a modifier (e.g. Ctrl+Click)"
@@ -114,7 +115,7 @@ class ShortcutCaptureField(private val render: (Shortcut) -> String) : JBTextFie
     }
 
     /** A modifier pressed and released on its own twice within half a second records "Double Ctrl" etc. */
-    private fun handleModifierTap(e: KeyEvent) {
+    internal fun handleModifierTap(e: KeyEvent) {
         val ownMask = when (e.keyCode) {
             KeyEvent.VK_CONTROL -> KeyEvent.CTRL_DOWN_MASK
             KeyEvent.VK_SHIFT -> KeyEvent.SHIFT_DOWN_MASK
@@ -142,6 +143,31 @@ class ShortcutCaptureField(private val render: (Shortcut) -> String) : JBTextFie
     private companion object {
         const val MODIFIERS = KeyEvent.CTRL_DOWN_MASK or KeyEvent.ALT_DOWN_MASK or
             KeyEvent.SHIFT_DOWN_MASK or KeyEvent.META_DOWN_MASK
+
+        private val guardInstalled = java.util.concurrent.atomic.AtomicBoolean()
+
+        /**
+         * The IDE runs its own double taps (Double Shift → Search Everywhere, Double Ctrl → Run Anything) from the
+         * event queue, before the focused component sees the keys and regardless of [skipKeyEventDispatcher]. In a
+         * dialog it stays quiet (modal context), but in a tool window it would fire while this field is recording.
+         * So while a capture field has the focus, modifier keys are recorded here first and then hidden from the
+         * IDE's handler (key code set to VK_UNDEFINED, which the handler treats as "some other key": no double tap).
+         */
+        fun installDoubleTapGuard() {
+            if (!guardInstalled.compareAndSet(false, true)) return
+            com.intellij.ide.IdeEventQueue.getInstance().addPreprocessor(com.intellij.ide.IdeEventQueue.EventDispatcher { event ->
+                val e = event as? KeyEvent
+                if (e != null && (e.id == KeyEvent.KEY_PRESSED || e.id == KeyEvent.KEY_RELEASED) &&
+                    e.keyCode in DoubleModifier.modifierKeys) {
+                    val field = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner as? ShortcutCaptureField
+                    if (field != null && field.isShowing) {
+                        field.handleModifierTap(e)
+                        e.keyCode = KeyEvent.VK_UNDEFINED
+                    }
+                }
+                false // never swallow the event: it still reaches the field (which ignores it now)
+            }, DoubleModifierStore.getInstance())
+        }
     }
 
     fun setShortcut(sc: Shortcut?) {

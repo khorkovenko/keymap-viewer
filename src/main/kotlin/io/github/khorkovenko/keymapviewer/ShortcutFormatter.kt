@@ -29,7 +29,8 @@ object ShortcutFormatter {
     )
 
     fun format(shortcut: Shortcut, mac: Boolean): String = when {
-        DoubleModifier.isDouble(shortcut) -> "Double " + modifierName(DoubleModifier.keyCodeOf(shortcut)!!, mac)
+        // Both this plugin's double modifiers and IntelliJ's own double-tap gestures read "Double Alt"
+        DoubleModifier.anyKeyCodeOf(shortcut) != null -> "Double " + modifierName(DoubleModifier.anyKeyCodeOf(shortcut)!!, mac)
         else -> formatPlain(shortcut, mac)
     }
 

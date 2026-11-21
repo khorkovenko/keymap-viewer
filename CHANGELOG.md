@@ -2,6 +2,16 @@
 
 All notable changes to Keymap Viewer are listed here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.6] - 2026-11-21
+
+### Added
+- **Search by keys:** a third checkbox next to the search field. Tick it and the search field records the key combination you press (Ctrl+Shift+F, Double Shift, Ctrl+Click…) instead of text, and the table lists the actions that use it. A single combination also finds two-step shortcuts that start with it. Double taps match both kinds a keymap can hold: this plugin's double modifiers and IntelliJ's own double-tap gestures. While it's on, "Show all actions" is on and "Show as Markdown" is off (both locked); unticking it restores them.
+
+### Fixed
+- Double-tapping Shift or Ctrl in a shortcut field inside the tool window opened Search Everywhere or Run Anything instead of being recorded.
+- IntelliJ's own double-tap shortcuts (for example Find in Files on double Alt) were shown as "Alt Alt"; they now read "Double Alt" like the plugin's own.
+- The checkboxes under the search field were cut off in a narrow tool window; they now wrap onto more lines, also right after the tool window opens.
+
 ## [1.0.5] - 2026-11-17
 
 ### Changed

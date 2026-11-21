@@ -9,6 +9,7 @@ import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.actionSystem.KeyboardShortcut
 import com.intellij.openapi.actionSystem.MouseShortcut
+import com.intellij.openapi.actionSystem.Shortcut
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileChooser.FileChooserFactory
 import com.intellij.openapi.fileChooser.FileSaverDescriptor
@@ -82,6 +83,36 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
     private val viewPanel = JPanel(viewCards)
     private var currentSummary: KeymapSummary? = null
     private val searchField = SearchTextField(false)
+    private val keysBox = JBCheckBox("Search by keys").apply {
+        toolTipText = "Press a key combination in the search field to find the actions that use it."
+    }
+    /** Replaces the text search while “Search by keys” is on: records pressed keys instead of typed text. */
+    private val keySearchField = ShortcutCaptureField { sc ->
+        ShortcutFormatter.format(toKeymapOs(sc), currentSummary?.targetOs?.isMac ?: ShortcutFormatter.currentOsIsMac)
+    }.apply {
+        emptyText.text = "Press a key combination to find the actions it runs"
+        val field = this
+        setExtensions(
+            object : com.intellij.ui.components.fields.ExtendableTextComponent.Extension {
+                override fun getIcon(hovered: Boolean): javax.swing.Icon = AllIcons.General.Keyboard
+                override fun isIconBeforeText() = true
+            },
+            object : com.intellij.ui.components.fields.ExtendableTextComponent.Extension {
+                override fun getIcon(hovered: Boolean): javax.swing.Icon? =
+                    if (field.shortcut == null) null else if (hovered) AllIcons.Actions.CloseHovered else AllIcons.Actions.Close
+                override fun getTooltip() = "Clear"
+                override fun getActionOnClick() = Runnable { field.setShortcut(null); field.requestFocusInWindow() }
+            },
+        )
+    }
+    private val searchCards = CardLayout()
+    private val searchHolder = JPanel(searchCards).apply {
+        add(searchField, CARD_TEXT_SEARCH)
+        add(keySearchField, CARD_KEY_SEARCH)
+    }
+    /** “Show all actions” / “Show as Markdown” as they were before “Search by keys” was ticked. */
+    private var savedShowAll = true
+    private var savedMarkdown = false
     private val infoLabel = JBLabel()
     private val statusLabel = JBLabel().apply { foreground = UIUtil.getContextHelpForeground() }
     private val tableModel = ShortcutTableModel()
@@ -132,23 +163,34 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
     }
 
     private val searchRow = CompactRow(BorderLayout(JBUI.scale(8), JBUI.scale(2))).apply { border = JBUI.Borders.empty(2, 4) }
-    // GridBagLayout centers the checkboxes vertically on the search field's line
-    private val checkboxes = JPanel(java.awt.GridBagLayout()).apply {
-        add(showAllBox, java.awt.GridBagConstraints().apply { insets = JBUI.insetsRight(8) })
-        add(markdownBox, java.awt.GridBagConstraints())
-    }
+    private val boxes get() = listOf(showAllBox, markdownBox, keysBox)
     private var searchStacked: Boolean? = null
+
+    /** Width the checkboxes need on one line. */
+    private fun boxesWidth() = boxes.sumOf { it.preferredSize.width } + JBUI.scale(8) * (boxes.size - 1)
 
     private fun layoutSearchRow(stacked: Boolean) {
         if (searchStacked == stacked) return
         searchStacked = stacked
         searchRow.removeAll()
         if (stacked) {
-            searchRow.add(searchField, BorderLayout.NORTH)
-            searchRow.add(JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply { add(checkboxes) }, BorderLayout.SOUTH)
+            // Under a full-width search bar; the checkboxes wrap onto more lines when even one line is too narrow
+            searchRow.add(searchHolder, BorderLayout.NORTH)
+            // WrapLayout measures against the parent's width even before its own first layout, so the very first
+            // pass already reserves room for every line (a negative left inset cancels FlowLayout's leading gap)
+            val gap = JBUI.scale(8)
+            searchRow.add(JPanel(WrapLayout(FlowLayout.LEFT, gap, 0)).apply {
+                border = javax.swing.border.EmptyBorder(0, -gap, 0, 0)
+                boxes.forEach(::add)
+            }, BorderLayout.SOUTH)
         } else {
-            searchRow.add(searchField, BorderLayout.CENTER)
-            searchRow.add(checkboxes, BorderLayout.EAST)
+            // GridBagLayout centers the checkboxes vertically on the search field's line
+            searchRow.add(searchHolder, BorderLayout.CENTER)
+            searchRow.add(JPanel(java.awt.GridBagLayout()).apply {
+                boxes.forEachIndexed { i, box ->
+                    add(box, java.awt.GridBagConstraints().apply { if (i < boxes.lastIndex) insets = JBUI.insetsRight(8) })
+                }
+            }, BorderLayout.EAST)
         }
         searchRow.revalidate()
         searchRow.repaint()
@@ -181,8 +223,12 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         // Wide panel: search and checkboxes share a line. Narrow panel: checkboxes go under a full-width search bar.
         addComponentListener(object : java.awt.event.ComponentAdapter() {
             override fun componentResized(e: java.awt.event.ComponentEvent) {
-                layoutSearchRow(stacked = width < JBUI.scale(640))
+                // Side by side only while the search field keeps at least 240 px next to the checkboxes
+                layoutSearchRow(stacked = width < boxesWidth() + JBUI.scale(240 + 16))
                 controls.revalidate() // the icon line may wrap or unwrap at the new width
+                searchRow.revalidate() // so may the checkbox lines
+                // Line counts depend on widths that are only final after this layout pass: measure once more
+                ApplicationManager.getApplication().invokeLater { searchRow.revalidate(); searchRow.repaint() }
             }
         })
         add(top, BorderLayout.NORTH)
@@ -202,6 +248,8 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         searchField.addDocumentListener(object : DocumentAdapter() {
             override fun textChanged(e: DocumentEvent) = applyFilter()
         })
+        keysBox.addActionListener { setKeySearch(keysBox.isSelected) }
+        keySearchField.onChange = { keySearchField.repaint(); applyFilter() } // repaint shows/hides the clear icon
         table.columnModel.getColumn(0).cellEditor = ShortcutCellEditor(
             isMac = { currentSummary?.targetOs?.isMac ?: ShortcutFormatter.currentOsIsMac },
             onDoubleClick = { editSelectedRow() },
@@ -277,7 +325,72 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         keepActionId?.let(::selectAction)
     }
 
+    /**
+     * “Search by keys” on: all actions are listed as a table (the other two boxes are locked) and the search field
+     * records pressed keys. Off: the other boxes get back the values they had and text search returns.
+     */
+    private fun setKeySearch(on: Boolean) {
+        if (on) {
+            savedShowAll = showAllBox.isSelected
+            savedMarkdown = markdownBox.isSelected
+            showAllBox.isSelected = true
+            markdownBox.isSelected = false
+        } else {
+            showAllBox.isSelected = savedShowAll
+            markdownBox.isSelected = savedMarkdown
+            keySearchField.setShortcut(null)
+        }
+        showAllBox.isEnabled = !on
+        markdownBox.isEnabled = !on
+        searchCards.show(searchHolder, if (on) CARD_KEY_SEARCH else CARD_TEXT_SEARCH)
+        if (on) statusLabel.text = ""
+        refresh() // re-reads the rows if "Show all actions" changed, then filters and shows the right view
+        ApplicationManager.getApplication().invokeLater {
+            if (on) keySearchField.requestFocusInWindow() else searchField.textEditor.requestFocusInWindow()
+        }
+    }
+
+    /** A shortcut pressed on this computer, in the selected keymap's convention (Ctrl ↔ ⌘ when the OS differs). */
+    private fun toKeymapOs(sc: Shortcut): Shortcut {
+        val os = currentSummary?.targetOs ?: return sc
+        return if (os != TargetOs.UNKNOWN && os.isMac != ShortcutFormatter.currentOsIsMac) ShortcutFormatter.translate(sc, os.isMac) else sc
+    }
+
+    /** IDs of the actions whose shortcuts use [pressed]; a single combination also finds chords starting with it. */
+    private fun actionsUsing(pressed: Shortcut): Set<String> {
+        val keymap = selectedKeymap ?: return emptySet()
+        val target = toKeymapOs(pressed)
+        // A double tap matches both kinds keymaps hold: this plugin's and IntelliJ's own gesture shortcut
+        val double = DoubleModifier.anyKeyCodeOf(target)
+        fun matches(s: Shortcut) = when {
+            double != null -> DoubleModifier.anyKeyCodeOf(s) == double
+            s == target -> true
+            else -> target is KeyboardShortcut && target.secondKeyStroke == null &&
+                s is KeyboardShortcut && !DoubleModifier.isDouble(s) && s.firstKeyStroke == target.firstKeyStroke
+        }
+        return tableModel.rows.asSequence()
+            .filter { row -> row.isAssigned && KeymapData.shortcutsOf(keymap, row.actionId).any(::matches) }
+            .map { it.actionId }.toSet()
+    }
+
     private fun applyFilter() {
+        if (keysBox.isSelected) {
+            val pressed = keySearchField.shortcut
+            if (pressed == null) {
+                sorter.rowFilter = null
+                statusLabel.text = ""
+            } else {
+                val ids = actionsUsing(pressed)
+                sorter.rowFilter = object : RowFilter<ShortcutTableModel, Int>() {
+                    override fun include(entry: Entry<out ShortcutTableModel, out Int>) =
+                        tableModel.rows[entry.identifier].actionId in ids
+                }
+                statusLabel.text = if (ids.isEmpty()) "No action uses ${keySearchField.text}."
+                else "${ids.size} action(s) use ${keySearchField.text}."
+            }
+            updateView()
+            return
+        }
         val text = searchField.text.trim()
         sorter.rowFilter = if (text.isEmpty()) null else RowFilter.regexFilter("(?i)" + Regex.escape(text))
         updateView()
@@ -630,6 +743,8 @@ class KeymapPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         const val MAX_PREVIEW_ROWS = 1500
         const val CARD_TABLE = "table"
         const val CARD_MD = "markdown"
+        const val CARD_TEXT_SEARCH = "textSearch"
+        const val CARD_KEY_SEARCH = "keySearch"
     }
 
     private class ShortcutTableModel : AbstractTableModel() {

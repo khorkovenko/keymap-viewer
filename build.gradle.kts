@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.github.khorkovenko.keymapviewer"
-version = "1.0.5"
+version = "1.0.6"
 
 repositories {
     mavenCentral()
@@ -34,6 +34,15 @@ intellijPlatform {
         }
         // Shown on the Marketplace page and in the IDE's update dialog (full history: CHANGELOG.md)
         changeNotes = """
+            <p><b>1.0.6</b></p>
+            <ul>
+              <li>New: <b>Search by keys</b>. Tick it and press a key combination in the search field to list the actions
+                  that use it (double taps match IntelliJ's own double-tap gestures too).
+                  While it's on, all actions are shown as a table.</li>
+              <li>Fixed: double-tapping Shift or Ctrl in a shortcut field inside the tool window opened Search Everywhere / Run Anything.</li>
+              <li>IntelliJ's double-tap shortcuts read "Double Alt" instead of "Alt Alt".</li>
+              <li>The checkboxes under the search field wrap onto more lines in a narrow tool window.</li>
+            </ul>
             <p><b>1.0.5</b></p>
             <ul>
               <li>Export saves the selected keymap and all macros into a folder (double-modifier shortcuts included).</li>

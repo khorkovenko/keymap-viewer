@@ -62,6 +62,19 @@ object DoubleModifier {
         KeyEvent.VK_CONTROL -> "Run Anything"
         else -> null
     }
+
+    /**
+     * The modifier key code of IntelliJ's own double-tap gesture as keymaps store it
+     * (`<keyboard-gesture-shortcut keystroke="alt alt" modifier="dblClick"/>`), otherwise null.
+     */
+    fun gestureKeyCodeOf(sc: Shortcut?): Int? {
+        val g = sc as? com.intellij.openapi.actionSystem.KeyboardModifierGestureShortcut ?: return null
+        if (g.type != com.intellij.openapi.actionSystem.KeyboardGestureAction.ModifierType.dblClick) return null
+        return g.stroke.keyCode.takeIf { it in modifierKeys }
+    }
+
+    /** The double-tapped modifier of either kind: this plugin's ([keyCodeOf]) or IntelliJ's gesture. */
+    fun anyKeyCodeOf(sc: Shortcut?): Int? = keyCodeOf(sc) ?: gestureKeyCodeOf(sc)
 }
 
 /**
